@@ -26,7 +26,6 @@ import java.util.Collections;
 import java.util.List;
 
 public class EventServiceTests {
-
     private UserController userController;
     private TeamController teamController;
     private EventController eventController;
@@ -35,8 +34,8 @@ public class EventServiceTests {
     private EventService eventService;
     private IUserRepository userRepository;
     private ITeamRepository teamRepository;
-
     private String userA, userB, userC, userD, userE, userF;
+    private List<String> userAEventIds;
     private DateTimeFormatter dateTimeFormatter;
     private DateTimeFormatter timeFormatter;
     private String team1, team2;
@@ -44,13 +43,14 @@ public class EventServiceTests {
     @Before
     public void setup() {
         this.userRepository = new UserInMemoryRepository();
-        this.userService = new UserService(this.userRepository);
+        this.userService = new UserService();
         this.userController = new UserController(this.userService);
         this.teamRepository = new TeamInMemoryRepository();
         this.teamService = new TeamService(this.teamRepository);
         this.teamController = new TeamController(this.teamService, this.userService);
-        this.eventService = new EventService();
+        this.eventService = new EventService(this.userService);
         this.eventController = new EventController(this.eventService, this.teamService, this.userService);
+        this.userAEventIds = new ArrayList<>();
 
         this.timeFormatter = DateTimeFormatter.ofPattern("hh:mm a");
         this.dateTimeFormatter = DateTimeFormatter.ofPattern("dd-MM-yyyy hh:mm a");
@@ -98,16 +98,36 @@ public class EventServiceTests {
 
     @Test
     public void testCase5() {
-        _testCase4();
-        String eventName = "event5";
-        Assertions.assertThrows(UserNotAvailableException.class, () -> {
-            String event5Id = this.eventController.createEvent(
-                    eventName,
-                    TimeSlot.of(LocalDateTime.parse("19-09-2024 10:00 AM", dateTimeFormatter), LocalDateTime.parse("19-09-2024 11:00 AM", dateTimeFormatter)),
-                    Arrays.asList(userA, userF),
-                    new ArrayList<>(),
-                    0);
-        });
+        _testCase5();
+    }
+
+    @Test
+    public void testCase6() {
+        _testCase5();
+
+        List<Event> events = this.eventController.getEvents(
+                userA,
+                TimeSlot.of(LocalDateTime.parse("19-09-2024 10:00 AM", dateTimeFormatter), LocalDateTime.parse("20-09-2024 05:00 PM", dateTimeFormatter))
+        );
+
+        Assertions.assertEquals(2, events.size());
+        List<String> eventNames = events.stream().map(Event::getName).toList();
+        Assertions.assertTrue(eventNames.contains("event1"));
+        Assertions.assertTrue(eventNames.contains("event4"));
+    }
+
+    @Test
+    public void testCase7() {
+        _testCase5();
+
+        List<Event> events = this.eventController.getEvents(
+                userB,
+                TimeSlot.of(LocalDateTime.parse("19-09-2024 10:00 AM", dateTimeFormatter), LocalDateTime.parse("20-09-2024 05:00 PM", dateTimeFormatter))
+        );
+
+        Assertions.assertEquals(1, events.size());
+        List<String> eventNames = events.stream().map(Event::getName).toList();
+        Assertions.assertTrue(eventNames.contains("event3") || eventNames.contains("event4"));
     }
 
     private void testCase1() {
@@ -118,7 +138,7 @@ public class EventServiceTests {
                 Collections.singletonList(userA),
                 Collections.singletonList(team1),
                 2);
-
+        this.userAEventIds.add(event1Id);
         Event event = this.eventController.getEvent(event1Id);
         Assertions.assertEquals(eventName, event.getName());
         Assertions.assertEquals(3, event.getParticipants().size());
@@ -153,5 +173,18 @@ public class EventServiceTests {
         Event event = this.eventController.getEvent(event4Id);
         Assertions.assertEquals(eventName, event.getName());
         Assertions.assertEquals(2, event.getParticipants().size());
+    }
+
+    private void _testCase5() {
+        _testCase4();
+        String eventName = "event5";
+        Assertions.assertThrows(UserNotAvailableException.class, () -> {
+            String event5Id = this.eventController.createEvent(
+                    eventName,
+                    TimeSlot.of(LocalDateTime.parse("19-09-2024 10:00 AM", dateTimeFormatter), LocalDateTime.parse("19-09-2024 11:00 AM", dateTimeFormatter)),
+                    Arrays.asList(userA, userF),
+                    new ArrayList<>(),
+                    0);
+        });
     }
 }

@@ -9,6 +9,6 @@ import java.util.List;
 public class TimeSlotUtils {
     public static boolean isSlotAvailable(@NonNull final List<TimeSlot> timeSlots, @NonNull final TimeSlot requiredSlot) {
         timeSlots.sort(Comparator.comparing(TimeSlot::getStartTime));
-        return timeSlots.stream().noneMatch(timeSlot -> timeSlot.doesOverlap(requiredSlot));
+        return timeSlots.stream().noneMatch(timeSlot -> timeSlot.overlaps(requiredSlot));
     }
 }

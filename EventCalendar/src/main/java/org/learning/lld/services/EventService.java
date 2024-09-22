@@ -4,10 +4,7 @@ import lombok.NonNull;
 import org.learning.lld.exceptions.NoSuchEventException;
 import org.learning.lld.exceptions.TeamNotAvailableException;
 import org.learning.lld.exceptions.UserNotAvailableException;
-import org.learning.lld.models.Event;
-import org.learning.lld.models.Team;
-import org.learning.lld.models.TimeSlot;
-import org.learning.lld.models.User;
+import org.learning.lld.models.*;
 import org.learning.lld.utils.TimeSlotUtils;
 
 import java.time.LocalDate;
@@ -18,11 +15,12 @@ import java.util.stream.Collectors;
 
 public class EventService {
     private final Map<String, Event> events;
-    private final Map<LocalDate, Map<User, List<TimeSlot>>> userEventsMap;
+    private final UserService userService;
 
-    public EventService() {
+    public EventService(@NonNull final UserService userService) {
         this.events = new HashMap<>();
-        this.userEventsMap = new HashMap<>();
+        //this.userEventsMap = new HashMap<>();
+        this.userService = userService;
     }
 
     public Event createEvent(
@@ -31,57 +29,43 @@ public class EventService {
             @NonNull final List<User> users,
             @NonNull final List<Team> teams,
             int numberOfRepresentations) {
-        //our core logic
-        //check if timeslot is within user's working hours
-        if (isAnyUserNotAvailable(users, timeSlot)) {
-            throw new UserNotAvailableException();
-        }
-
-        teams.forEach(team -> {
-            if (team.getUsers().stream().filter(user -> user.isAvailable(timeSlot)).count() < numberOfRepresentations) {
-                throw new TeamNotAvailableException();
-            }
-        });
 
         List<User> eventUsers = new ArrayList<>();
         //check if users are available during the given timeSlot
-        LocalDate eventDate = timeSlot.getStartTime().toLocalDate();
-        Map<User, List<TimeSlot>> userAvailabilities = userEventsMap.getOrDefault(eventDate, new HashMap<>());
 
         users.forEach(user -> {
-            List<TimeSlot> userSlots = userAvailabilities.getOrDefault(user, new ArrayList<>());
-            if (!TimeSlotUtils.isSlotAvailable(userSlots, timeSlot)) {
+            if (!userService.isUserAvailable(user, timeSlot)) {
                 throw new UserNotAvailableException();
             }
-            userSlots.add(timeSlot);
-            userAvailabilities.put(user, userSlots);
             eventUsers.add(user);
         });
 
-        for (int i = 0; i < teams.size(); i++) {
+
+        for (Team value : teams) {
             Team team = teams.get(0);
             int representations = 0;
             for (int j = 0; j < team.getUsers().size(); j++) {
-                User user = teams.get(i).getUsers().get(j);
-                List<TimeSlot> userSlots = userAvailabilities.getOrDefault(user, new ArrayList<>());
-                if (TimeSlotUtils.isSlotAvailable(userSlots, timeSlot)) {
-                    userSlots.add(timeSlot);
-                    userAvailabilities.put(user, userSlots);
+                User user = value.getUsers().get(j);
+                if (userService.isUserAvailable(user, timeSlot)) {
                     eventUsers.add(user);
                     representations++;
-                    if (representations == numberOfRepresentations) {
-                        break;
-                    }
+                }
+                if (representations == numberOfRepresentations) {
+                    break;
                 }
             }
             if (representations < numberOfRepresentations) {
                 throw new TeamNotAvailableException();
             }
         }
-        userEventsMap.put(eventDate, userAvailabilities);
+
+        //reached here, users and teams are available, now create event and block users calendars
 
         Event event = new Event(UUID.randomUUID().toString(), eventName, eventUsers, timeSlot);
         events.put(event.getId(), event);
+
+        eventUsers.forEach(user -> this.userService.blockCalender(user, event, timeSlot));
+
         return event;
     }
 
@@ -92,7 +76,8 @@ public class EventService {
         return events.get(eventId);
     }
 
-    private boolean isAnyUserNotAvailable(@NonNull final List<User> users, @NonNull final TimeSlot timeSlot) {
-        return users.stream().anyMatch(user -> !user.isAvailable(timeSlot));
+    public List<Event> getEvents(@NonNull final User user, @NonNull final TimeSlot timeSlot) {
+        List<UserEvent> userEvents = this.userService.getEvents(user, timeSlot);
+        return userEvents.stream().map(UserEvent::getEvent).collect(Collectors.toList());
     }
 }
